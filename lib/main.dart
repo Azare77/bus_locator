@@ -2,8 +2,8 @@ import 'package:bus/BLoc/map_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:location/location.dart';
 
 void main() {
   runApp(MyApp());
@@ -121,7 +121,21 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
       child: BlocBuilder<MapBloc, MapState>(
         builder: (context, MapState state) {
           return Scaffold(
-            appBar: AppBar(title: Text(widget.title)),
+            appBar: AppBar(
+              title: Text(widget.title),
+              actions: [
+                Row(
+                  children: [
+                    Text('on Bus ?'),
+                    Switch(
+                        value: state.onBus,
+                        onChanged: (value) {
+                          context.read<MapBloc>().changeUseStatus();
+                        }),
+                  ],
+                )
+              ],
+            ),
             body: FlutterMap(
               options: MapOptions(
                   center: center,
@@ -129,6 +143,8 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                   // controller: controller,
                   onTap: (tapPosition, point) {
                     print(controller.zoom);
+                    print(point.latitude);
+                    print(point.longitude);
                   },
                   onLongPress: (tapPosition, LatLng point) {
                     print(point.latitude);
@@ -138,12 +154,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                   minZoom: 10.5,
                   maxZoom: 18.4),
               mapController: controller,
-              children: [
-                Icon(
-                  Icons.add,
-                  color: Colors.red,
-                )
-              ],
               layers: [
                 TileLayerOptions(
                   urlTemplate:
@@ -158,10 +168,23 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                         height: 80.0,
                         point: state.myLocation,
                         builder: (ctx) => Container(
-                          child: Icon(
-                            Icons.location_on_rounded,
-                            size: 30,
-                            color: Colors.blue,
+                          child: Column(
+                            children: [
+                              Icon(
+                                state.onBus
+                                    ? Icons.directions_bus_rounded
+                                    : Icons.location_on_rounded,
+                                size: 30,
+                                color: state.onBus
+                                    ? Colors.deepOrange
+                                    : Colors.blue,
+                              ),
+                              if (state.onBus)
+                                Text(
+                                  'Line Name',
+                                  style: TextStyle(fontSize: 10),
+                                )
+                            ],
                           ),
                         ),
                       ),
@@ -205,10 +228,15 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                     child: Icon(Icons.location_on),
                     backgroundColor: Colors.green,
                     onPressed: () async {
-                      context.read<MapBloc>().determinePosition().then(
-                          (Position position) => _animatedMapMove(
+                      context
+                          .read<MapBloc>()
+                          .determinePosition()
+                          .then((LocationData position) {
+                        if (position != null)
+                          _animatedMapMove(
                               LatLng(position.latitude, position.longitude),
-                              14));
+                              14);
+                      });
                     }),
                 SizedBox(width: 5),
                 FloatingActionButton(
