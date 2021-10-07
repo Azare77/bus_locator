@@ -13,7 +13,7 @@
 - [ ] limit map boundaries
 - [ ] add comments to the code
 - [ ] connect to server
-- [x] make a request to turn on location if it's off
+- [x] make a request to turn on location service if it's off
 - [ ] show each Bus route by different color
 - [ ] make these options meaningful 😑
 
