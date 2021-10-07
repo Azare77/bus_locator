@@ -4,6 +4,7 @@ import 'package:bloc/bloc.dart';
 import 'package:bus/Model/Functions.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class MapState {
@@ -17,31 +18,33 @@ class MapState {
 class MapBloc extends Bloc<MapEvent, MapState> {
   MapBloc() : super(MapState(null, [], [])) {
     print('data');
+    getPermissions();
     connectToServer();
-    Timer.periodic(Duration(seconds: 10), (timer) {
+    determinePosition();
+    Timer.periodic(Duration(seconds: 5), (timer) {
       determinePosition();
     });
   }
 
-  IO.Socket socket = IO.io('http://176.9.178.49:3000', <String, dynamic>{
-    'transports': ['websocket'],
-    'autoConnect': true,
-  });
+  // IO.Socket socket = IO.io('http://server', <String, dynamic>{
+  //   'transports': ['websocket'],
+  //   'autoConnect': true,
+  // });
 
   void connectToServer() {
-    socket.on('connect', (_) {
-      print('connect');
-      socket.emit('user_connect', {"connectedId": 6});
-    });
-    socket.on('event', (data) {
-      print(data);
-      // Timer(Duration(seconds: 5),(){
-      socket.emit('msg', data.toString());
-      // });
-    });
-    socket.on('disconnect', (_) => print('disconnect'));
-    socket.on('fromServer', (_) => print(_));
-    socket.on('error', (_) => print(_));
+    // socket.on('connect', (_) {
+    //   print('connect');
+    //   socket.emit('user_connect', {"connectedId": 6});
+    // });
+    // socket.on('event', (data) {
+    //   print(data);
+    //   // Timer(Duration(seconds: 5),(){
+    //   socket.emit('msg', data.toString());
+    //   // });
+    // });
+    // socket.on('disconnect', (_) => print('disconnect'));
+    // socket.on('fromServer', (_) => print(_));
+    // socket.on('error', (_) => print(_));
   }
 
   Future<Position> determinePosition() async {
@@ -95,6 +98,20 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       yield MapState(state.myLocation, state.route, state.markers);
     } else if (event == MapEvent.addMarker) {
       yield MapState(state.myLocation, state.route, state.markers);
+    }
+  }
+
+  void getPermissions() async {
+    var status = await Permission.location.status;
+    if (!status.isGranted) {
+      await Permission.location.request();
+    }
+    if (status.isDenied) {
+      // We didn't ask for permission yet or the permission has been denied before but not permanently.
+    }
+    // You can can also directly ask the permission about its status.
+    if (await Permission.location.isRestricted) {
+      // The OS restricts access, for example because of parental controls.
     }
   }
 }

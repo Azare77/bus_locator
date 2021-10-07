@@ -20,7 +20,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: MyHomePage(title: 'Bus Locator'),
     );
   }
 }
@@ -36,20 +36,22 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   final MapController controller = MapController();
-  Marker marker = Marker(
-    width: 80.0,
-    height: 80.0,
-    point: new LatLng(31.89092216595675, 54.354271730811575),
-    builder: (ctx) => new Container(
-      child: new Icon(
-        Icons.location_on_rounded,
-        color: Colors.red,
-      ),
-    ),
-  );
+
+  // Marker marker = Marker(
+  //   width: 80.0,
+  //   height: 80.0,
+  //   point: new LatLng(31.89092216595675, 54.354271730811575),
+  //   builder: (ctx) => new Container(
+  //     child: new Icon(
+  //       Icons.location_on_rounded,
+  //       color: Colors.red,
+  //     ),
+  //   ),
+  // );
 
   void _animatedMapMove(LatLng destLocation, double destZoom) {
     if (destLocation == null) return;
+    if (destZoom < controller.zoom) destZoom = controller.zoom;
     // Create some tweens. These serve to split up the transition from one location to another.
     // In our case, we want to split the transition be<tween> our current map center and the destination.
     final _latTween = Tween<double>(
@@ -83,36 +85,71 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     animationController.forward();
   }
 
+  void _animatedMapRotation(double destRotation) {
+    // Create some tweens. These serve to split up the transition from one location to another.
+    // In our case, we want to split the transition be<tween> our current map center and the destination.
+    final _rotationTween =
+        Tween<double>(begin: this.controller.rotation, end: destRotation);
+    // Create a animation controller that has a duration and a TickerProvider.
+    var animationController = AnimationController(
+        duration: const Duration(milliseconds: 2000), vsync: this);
+    // The animation determines what path the animation will take. You can try different Curves values, although I found
+    // fastOutSlowIn to be my favorite.
+    Animation<double> animation = CurvedAnimation(
+        parent: animationController, curve: Curves.fastOutSlowIn);
+
+    animationController.addListener(() {
+      this.controller.rotate(_rotationTween.evaluate(animation));
+    });
+
+    animation.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        animationController.dispose();
+      } else if (status == AnimationStatus.dismissed) {
+        animationController.dispose();
+      }
+    });
+
+    animationController.forward();
+  }
+
   @override
   Widget build(BuildContext context) {
+    LatLng center = LatLng(31.88212374450709, 54.369690043577506);
     return BlocProvider<MapBloc>(
       create: (context) => MapBloc(),
       child: BlocBuilder<MapBloc, MapState>(
         builder: (context, MapState state) {
           return Scaffold(
-            appBar: AppBar(
-              title: Text(widget.title)
-            ),
+            appBar: AppBar(title: Text(widget.title)),
             body: FlutterMap(
-              options: new MapOptions(
-                  center: LatLng(31.89092216595675, 54.354271730811575),
-                  zoom: 13.0,
+              options: MapOptions(
+                  center: center,
+                  zoom: 14.0,
                   // controller: controller,
-                  onLongPress: (LatLng pos) {
-                    context.read<MapBloc>().addMarker(pos);
+                  onTap: (tapPosition, point) {
+                    print(controller.zoom);
                   },
+                  onLongPress: (tapPosition, LatLng point) {
+                    print(point.latitude);
+                    print(point.longitude);
+                    context.read<MapBloc>().addMarker(point);
+                  },
+                  minZoom: 10.5,
                   maxZoom: 18.4),
               mapController: controller,
+              children: [
+                Icon(
+                  Icons.add,
+                  color: Colors.red,
+                )
+              ],
               layers: [
                 TileLayerOptions(
-                    urlTemplate:
-                    "https://api.mapbox.com/styles/v1/a-zare-developer/ckjpvqq7c55iq19qsu52oubkx/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiYS16YXJlLWRldmVsb3BlciIsImEiOiJja2pwcDR5dzEwYXFyMzNqeGFvMWh3dzNsIn0.B6fcEX4VQfQaK33rk04YLg",
-                    // "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                    additionalOptions: {
-                      'accessToken':
-                      'pk.eyJ1IjoiYS16YXJlLWRldmVsb3BlciIsImEiOiJja2pwcDR5dzEwYXFyMzNqeGFvMWh3dzNsIn0.B6fcEX4VQfQaK33rk04YLg',
-                      'id': 'mapbox.mapbox-traffic-v1'
-                    }),
+                  urlTemplate:
+                      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  subdomains: ['a', 'b', 'c'],
+                ),
                 MarkerLayerOptions(
                   markers: [
                     if (state.myLocation != null)
@@ -120,10 +157,11 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                         width: 80.0,
                         height: 80.0,
                         point: state.myLocation,
-                        builder: (ctx) => new Container(
-                          child: new Icon(
+                        builder: (ctx) => Container(
+                          child: Icon(
                             Icons.location_on_rounded,
-                            color: Colors.red,
+                            size: 30,
+                            color: Colors.blue,
                           ),
                         ),
                       ),
@@ -147,7 +185,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                     Polyline(
                         points: state.route,
                         strokeWidth: 4.0,
-                        color: Colors.purple),
+                        color: Colors.green),
                   ],
                 )
               ],
@@ -156,10 +194,9 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 FloatingActionButton(
-                    child: Icon(Icons.location_on),
+                    child: Icon(Icons.alt_route_rounded),
                     backgroundColor: Colors.red,
                     onPressed: () async {
-                      // print('data');
                       context.read<MapBloc>().getRoute(state.markers);
                       context.read<MapBloc>().connectToServer();
                     }),
@@ -171,7 +208,14 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                       context.read<MapBloc>().determinePosition().then(
                           (Position position) => _animatedMapMove(
                               LatLng(position.latitude, position.longitude),
-                              18));
+                              14));
+                    }),
+                SizedBox(width: 5),
+                FloatingActionButton(
+                    child: Icon(Icons.compass_calibration_rounded),
+                    backgroundColor: Colors.green,
+                    onPressed: () async {
+                      _animatedMapRotation(0);
                     }),
               ],
             ),
