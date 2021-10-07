@@ -16,8 +16,6 @@ class MapState {
 }
 
 class MapBloc extends Bloc<MapEvent, MapState> {
-  Location location = new Location();
-
   MapBloc() : super(MapState(null, [], [], false)) {
     connectToServer();
     setupLocationService();
@@ -44,8 +42,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     // socket.on('error', (_) => print(_));
   }
 
+  Location location;
+
   void setupLocationService() async {
-    location.enableBackgroundMode(enable: true);
+    location = Location();
+    await location.enableBackgroundMode(enable: true);
     await determinePosition();
     location.onLocationChanged.listen((LocationData currentLocation) {
       double latitudeDifference =
@@ -67,25 +68,29 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     LocationData _locationData;
     PermissionStatus _permissionGranted;
 
-    _serviceEnabled = await location.serviceEnabled();
-    if (!_serviceEnabled) {
-      print('get location');
-      _serviceEnabled = await location.requestService();
+    try{
+      _serviceEnabled = await location.serviceEnabled();
       if (!_serviceEnabled) {
-        return null;
+        print('get location');
+        _serviceEnabled = await location.requestService();
+        if (!_serviceEnabled) {
+          return null;
+        }
       }
-    }
-    _permissionGranted = await location.hasPermission();
-    if (_permissionGranted == PermissionStatus.denied) {
-      _permissionGranted = await location.requestPermission();
-      if (_permissionGranted != PermissionStatus.granted) {
-        return null;
+      _permissionGranted = await location.hasPermission();
+      if (_permissionGranted == PermissionStatus.denied) {
+        _permissionGranted = await location.requestPermission();
+        if (_permissionGranted != PermissionStatus.granted) {
+          return null;
+        }
       }
+      _locationData = await location.getLocation();
+      state..myLocation = LatLng(_locationData.latitude, _locationData.longitude);
+      add(MapEvent.GetMyLocation);
+      return _locationData;
+    } catch(e){
+      return await determinePosition();
     }
-    _locationData = await location.getLocation();
-    state..myLocation = LatLng(_locationData.latitude, _locationData.longitude);
-    add(MapEvent.GetMyLocation);
-    return _locationData;
   }
 
   void getRoute(List<LatLng> positions) async {
