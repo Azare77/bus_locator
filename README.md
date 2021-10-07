@@ -12,7 +12,7 @@
 - [ ] limit map boundaries
 - [ ] add comments to the code
 - [ ] connect to server
-- [ ] make a request to turn on location if it's off
+- [x] make a request to turn on location if it's off
 - [ ] show each Bus route by specific color
 
 For help getting started with Flutter, view our

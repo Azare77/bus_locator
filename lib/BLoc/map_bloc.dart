@@ -2,28 +2,25 @@ import 'dart:async';
 
 import 'package:bloc/bloc.dart';
 import 'package:bus/Model/Functions.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:location/location.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class MapState {
   LatLng myLocation;
   List<LatLng> route;
   List<LatLng> markers;
+  bool onBus;
 
-  MapState(this.myLocation, this.route, this.markers);
+  MapState(this.myLocation, this.route, this.markers, this.onBus);
 }
 
 class MapBloc extends Bloc<MapEvent, MapState> {
-  MapBloc() : super(MapState(null, [], [])) {
-    print('data');
-    getPermissions();
+  Location location = new Location();
+
+  MapBloc() : super(MapState(null, [], [], false)) {
     connectToServer();
-    determinePosition();
-    Timer.periodic(Duration(seconds: 5), (timer) {
-      determinePosition();
-    });
+    setupLocationService();
   }
 
   // IO.Socket socket = IO.io('http://server', <String, dynamic>{
@@ -47,33 +44,48 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     // socket.on('error', (_) => print(_));
   }
 
-  Future<Position> determinePosition() async {
-    bool serviceEnabled;
-    LocationPermission permission;
+  void setupLocationService() async {
+    location.enableBackgroundMode(enable: true);
+    await determinePosition();
+    location.onLocationChanged.listen((LocationData currentLocation) {
+      double latitudeDifference =
+          currentLocation.latitude - state.myLocation.latitude;
+      double longitudeDifference =
+          currentLocation.longitude - state.myLocation.longitude;
+      if (latitudeDifference.abs() > 0.0001 ||
+          longitudeDifference.abs() > 0.0001) {
+        state
+          ..myLocation =
+              LatLng(currentLocation.latitude, currentLocation.longitude);
+        add(MapEvent.GetMyLocation);
+      }
+    });
+  }
 
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return Future.error('Location services are disabled.');
-    }
+  Future<LocationData> determinePosition() async {
+    bool _serviceEnabled;
+    LocationData _locationData;
+    PermissionStatus _permissionGranted;
 
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.deniedForever) {
-      return Future.error(
-          'Location permissions are permantly denied, we cannot request permissions.');
-    }
-
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission != LocationPermission.whileInUse &&
-          permission != LocationPermission.always) {
-        return Future.error(
-            'Location permissions are denied (actual value: $permission).');
+    _serviceEnabled = await location.serviceEnabled();
+    if (!_serviceEnabled) {
+      print('get location');
+      _serviceEnabled = await location.requestService();
+      if (!_serviceEnabled) {
+        return null;
       }
     }
-    Position myPosition = await Geolocator.getCurrentPosition();
-    state..myLocation = LatLng(myPosition.latitude, myPosition.longitude);
+    _permissionGranted = await location.hasPermission();
+    if (_permissionGranted == PermissionStatus.denied) {
+      _permissionGranted = await location.requestPermission();
+      if (_permissionGranted != PermissionStatus.granted) {
+        return null;
+      }
+    }
+    _locationData = await location.getLocation();
+    state..myLocation = LatLng(_locationData.latitude, _locationData.longitude);
     add(MapEvent.GetMyLocation);
-    return myPosition;
+    return _locationData;
   }
 
   void getRoute(List<LatLng> positions) async {
@@ -83,36 +95,19 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     add(MapEvent.GetRoute);
   }
 
-  void _getMyLocation() async {}
-
   void addMarker(LatLng position) {
     state..markers.add(position);
     add(MapEvent.addMarker);
   }
 
-  @override
-  Stream<MapState> mapEventToState(MapEvent event) async* {
-    if (event == MapEvent.GetMyLocation) {
-      yield MapState(state.myLocation, state.route, state.markers);
-    } else if (event == MapEvent.GetRoute) {
-      yield MapState(state.myLocation, state.route, state.markers);
-    } else if (event == MapEvent.addMarker) {
-      yield MapState(state.myLocation, state.route, state.markers);
-    }
+  void changeUseStatus() {
+    state..onBus = !state.onBus;
+    add(MapEvent.addMarker);
   }
 
-  void getPermissions() async {
-    var status = await Permission.location.status;
-    if (!status.isGranted) {
-      await Permission.location.request();
-    }
-    if (status.isDenied) {
-      // We didn't ask for permission yet or the permission has been denied before but not permanently.
-    }
-    // You can can also directly ask the permission about its status.
-    if (await Permission.location.isRestricted) {
-      // The OS restricts access, for example because of parental controls.
-    }
+  @override
+  Stream<MapState> mapEventToState(MapEvent event) async* {
+    yield MapState(state.myLocation, state.route, state.markers, state.onBus);
   }
 }
 
