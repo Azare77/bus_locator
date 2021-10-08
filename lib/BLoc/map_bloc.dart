@@ -69,7 +69,13 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     });
     socket.on('disconnect', (_) => socket.connect());
     // socket.on('fromServer', (_) => print(_));
+
+    //make suer that you are connect :)
     socket.on('error', (_) => socket.connect());
+    socket.onDisconnect((data) => socket.connect());
+    socket.onclose((data) => socket.connect());
+    socket.onConnectError((data) => socket.connect());
+    socket.onConnectTimeout((data) => socket.connect());
   }
 
 // check if a location is expired the ttl is 5 seconds
