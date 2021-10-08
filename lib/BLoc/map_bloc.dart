@@ -30,16 +30,21 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     Timer.periodic(validDuration, (timer) => checkLocationsValidation());
   }
 
+  Duration validDuration = const Duration(seconds: 5);
+
   IO.Socket socket = IO.io('http://192.168.1.9:3000', <String, dynamic>{
     'transports': ['websocket'],
     'autoConnect': true,
   });
 
+  //make connection to server
   void connectToServer() {
     socket.connect();
     socket.on('connect', (_) {
       print('connect');
     });
+
+    //update or create new people location
     socket.on('getLocation', (data) {
       if (state.myLocation.id != null &&
           state.myLocation.id != data['user_id']) {
@@ -49,10 +54,13 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         add(MapEvent.GetMyLocation);
       }
     });
+
+    // get this client id to don't consider itself as other users
     socket.on('get_id', (data) {
       state..myLocation.id = data.toString();
       add(MapEvent.GetMyLocation);
     });
+    // when a user stop broadcast her/his location
     socket.on('userStopBroadcast', (data) {
       print(data);
       print(data['user_id'].runtimeType);
@@ -64,8 +72,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     socket.on('error', (_) => socket.connect());
   }
 
-  Duration validDuration = const Duration(seconds: 5);
-
+// check if a location is expired the ttl is 5 seconds
   checkLocationsValidation() async {
     DateTime currentTime = DateTime.now();
     try {
@@ -82,23 +89,25 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 
   Location _location;
 
+//call enable location service and set a listener to send user location
   void setupLocationService() async {
     _location = Location();
     // await location.enableBackgroundMode(enable: true);
     await determinePosition();
     _location.onLocationChanged.listen((LocationData currentLocation) {
       if (socket.disconnected) connectToServer();
-      if (state.onBus)
-        socket.emit('sendLocation', {
-          "lat": currentLocation.latitude,
-          "lng": currentLocation.longitude
-        });
       double latitudeDifference =
           currentLocation.latitude - state.myLocation.location.latitude;
       double longitudeDifference =
           currentLocation.longitude - state.myLocation.location.longitude;
+      //it sends when user move a distance
       if (latitudeDifference.abs() > 0.0001 ||
           longitudeDifference.abs() > 0.0001) {
+        if (state.onBus)
+          socket.emit('sendLocation', {
+            "lat": currentLocation.latitude,
+            "lng": currentLocation.longitude
+          });
         state
           ..myLocation = LocationModel(state.myLocation.id,
               LatLng(currentLocation.latitude, currentLocation.longitude));
@@ -107,6 +116,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     });
   }
 
+  //enable location service and get user location
   Future<LocationData> determinePosition() async {
     bool _serviceEnabled;
     LocationData _locationData;
@@ -140,6 +150,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
+  //routing method
   void getRoute(List<LatLng> positions) async {
     List<LatLng> route = await getDirections(positions);
     state..route = route;
@@ -147,11 +158,13 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     add(MapEvent.GetRoute);
   }
 
+  // add markers to navigate between them
   void addMarker(LatLng position) {
     state..markers.add(position);
     add(MapEvent.addMarker);
   }
 
+  //start/stop broadcasting
   void changeUseStatus() {
     if (state.onBus)
       socket.emit('stopBroadcast');
@@ -165,6 +178,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     add(MapEvent.addMarker);
   }
 
+  //it will set icons size
   void changeZoom(double zoom) {
     state..zoom = zoom;
     add(MapEvent.ChangeZoom);
