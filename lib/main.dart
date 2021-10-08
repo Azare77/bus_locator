@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:bus/BLoc/map_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,7 +7,19 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 
+import 'Model/PeopleLocationModel.dart';
+
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback =
+          (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 void main() {
+  HttpOverrides.global = new MyHttpOverrides();
   runApp(MyApp());
 }
 
@@ -103,18 +117,19 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   }
 
   LatLng center;
-  List<LatLng> peoplePoints;
+  List<PeopleLocationModel> peopleLocations;
 
   @override
   Widget build(BuildContext context) {
+    Size size = MediaQuery.of(context).size;
+
     return BlocProvider<MapBloc>(
       create: (context) => MapBloc(),
       child: BlocBuilder<MapBloc, MapState>(
         builder: (context, MapState state) {
-          peoplePoints = state.peopleLocations.values.toList();
-          print(peoplePoints.length);
+          peopleLocations = state.peopleLocations.values.toList();
           if (state.myLocation.location != null) {
-            print('location Updated');
+            // print('location Updated');
             center = state.myLocation.location;
             if (fixOnCenter)
               _animatedMapMove(state.myLocation.location, controller.zoom);
@@ -137,12 +152,19 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
             ),
             body: FlutterMap(
               options: MapOptions(
-                center: LatLng(31.88212374450709, 54.369690043577506),
+                center: LatLng(31.88276335597011, 54.36766399046463),
+                nePanBoundary: LatLng(31.939580199898106, 54.38910940217473),
+                swPanBoundary: LatLng(31.832241219879364, 54.29659354468416),
                 zoom: 14.0,
-                minZoom: 5,
+                minZoom: 10.5,
                 maxZoom: 18.4,
+                screenSize: size,
                 onPositionChanged: (MapPosition position, bool hasGesture) {
                   if (hasGesture) fixOnCenter = false;
+                  double zoom =
+                      double.parse(controller.zoom.toStringAsFixed(1));
+                  if (zoom != state.zoom)
+                    context.read<MapBloc>().changeZoom(zoom);
                 },
                 onLongPress: (tapPosition, LatLng point) {
                   print(point.latitude);
@@ -164,36 +186,26 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                         width: 80.0,
                         height: 80.0,
                         point: center,
-                        builder: (ctx) => Container(
-                          child: Column(
-                            children: [
-                              Icon(
-                                state.onBus
-                                    ? Icons.directions_bus_rounded
-                                    : Icons.location_on_rounded,
-                                size: 30,
-                                color: state.onBus
-                                    ? Colors.deepOrange
-                                    : Colors.blue,
-                              ),
-                              if (state.onBus)
-                                Text(
-                                  'Line Name',
-                                  style: TextStyle(fontSize: 10),
-                                )
-                            ],
-                          ),
+                        builder: (ctx) => Icon(
+                          state.onBus
+                              ? Icons.directions_bus_rounded
+                              : Icons.location_on_rounded,
+                          size: state.zoom < 11 ? 10 : state.zoom * 2,
+                          color: state.onBus
+                              ? Colors.deepOrangeAccent
+                              : Colors.blue,
                         ),
                       ),
-                    for (LatLng position in peoplePoints)
+                    for (PeopleLocationModel position in peopleLocations)
                       Marker(
                         width: 80.0,
                         height: 80.0,
-                        point: position,
+                        point: position.location,
                         builder: (ctx) => new Container(
                           child: new Icon(
-                            Icons.person,
-                            color: Colors.red,
+                            Icons.directions_bus_rounded,
+                            size: state.zoom < 11 ? 10 : state.zoom * 2,
+                            color: Colors.deepOrangeAccent,
                           ),
                         ),
                       ),

@@ -1,27 +1,33 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:bloc/bloc.dart';
 import 'package:bus/Model/Functions.dart';
 import 'package:bus/Model/LocationModel.dart';
+import 'package:bus/Model/PeopleLocationModel.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class MapState {
   LocationModel myLocation;
-  Map<String, LatLng> peopleLocations;
+  HashMap<String, PeopleLocationModel> peopleLocations;
   List<LatLng> route;
   List<LatLng> markers;
   bool onBus;
+  double zoom;
 
   MapState(this.myLocation, this.peopleLocations, this.route, this.markers,
-      this.onBus);
+      this.onBus, this.zoom);
 }
 
 class MapBloc extends Bloc<MapEvent, MapState> {
-  MapBloc() : super(MapState(LocationModel(null, null), {}, [], [], false)) {
+  MapBloc()
+      : super(
+            MapState(LocationModel(null, null), HashMap(), [], [], false, 14)) {
     connectToServer();
     setupLocationService();
+    Timer.periodic(validDuration, (timer) => checkLocationsValidation());
   }
 
   IO.Socket socket = IO.io('http://192.168.1.9:3000', <String, dynamic>{
@@ -35,9 +41,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       print('connect');
     });
     socket.on('getLocation', (data) {
-      if (state.myLocation.id != data['user_id']) {
+      if (state.myLocation.id != null &&
+          state.myLocation.id != data['user_id']) {
         state
-          ..peopleLocations[data['user_id']] = LatLng(data['lat'], data['lng']);
+          ..peopleLocations[data['user_id']] = PeopleLocationModel(
+              DateTime.now(), LatLng(data['lat'], data['lng']));
         add(MapEvent.GetMyLocation);
       }
     });
@@ -49,14 +57,27 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       print(data);
       print(data['user_id'].runtimeType);
       state..peopleLocations.remove(data['user_id']);
-      state.peopleLocations.forEach((key, value) {
-        print(key);
-      });
-      add(MapEvent.GetMyLocation);
+      add(MapEvent.GetPeopleLocation);
     });
     socket.on('disconnect', (_) => socket.connect());
     // socket.on('fromServer', (_) => print(_));
     socket.on('error', (_) => socket.connect());
+  }
+
+  Duration validDuration = const Duration(seconds: 5);
+
+  checkLocationsValidation() async {
+    DateTime currentTime = DateTime.now();
+    try {
+      state.peopleLocations.forEach((key, value) {
+        if (value.time.isBefore(currentTime.subtract(validDuration))) {
+          state..peopleLocations.remove(key);
+        }
+      });
+    } catch (e) {
+      checkLocationsValidation();
+    }
+    add(MapEvent.GetPeopleLocation);
   }
 
   Location _location;
@@ -144,11 +165,22 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     add(MapEvent.addMarker);
   }
 
+  void changeZoom(double zoom) {
+    state..zoom = zoom;
+    add(MapEvent.ChangeZoom);
+  }
+
   @override
   Stream<MapState> mapEventToState(MapEvent event) async* {
     yield MapState(state.myLocation, state.peopleLocations, state.route,
-        state.markers, state.onBus);
+        state.markers, state.onBus, state.zoom);
   }
 }
 
-enum MapEvent { GetMyLocation, GetRoute, addMarker }
+enum MapEvent {
+  GetMyLocation,
+  GetPeopleLocation,
+  GetRoute,
+  addMarker,
+  ChangeZoom
+}

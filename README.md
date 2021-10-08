@@ -10,11 +10,10 @@
 - [x] show map on screen
 - [x] find user location
 - [x] routing between points on map
-- [ ] limit map boundaries
+- [x] limit map boundaries
 - [ ] add comments to the code
 - [x] connect to server
 - [x] make a request to turn on location service if it's off
-- [ ] show each Bus route by different color
 - [ ] make these options meaningful 😑
 
 For help getting started with Flutter, view our
