@@ -36,20 +36,9 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   final MapController controller = MapController();
+  bool fixOnCenter = true;
 
-  // Marker marker = Marker(
-  //   width: 80.0,
-  //   height: 80.0,
-  //   point: new LatLng(31.89092216595675, 54.354271730811575),
-  //   builder: (ctx) => new Container(
-  //     child: new Icon(
-  //       Icons.location_on_rounded,
-  //       color: Colors.red,
-  //     ),
-  //   ),
-  // );
-
-  void _animatedMapMove(LatLng destLocation, double destZoom) {
+  Future<void> _animatedMapMove(LatLng destLocation, double destZoom) async {
     if (destLocation == null) return;
     if (destZoom < controller.zoom) destZoom = controller.zoom;
     // Create some tweens. These serve to split up the transition from one location to another.
@@ -77,11 +66,11 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     animation.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         animationController.dispose();
+        fixOnCenter = true;
       } else if (status == AnimationStatus.dismissed) {
         animationController.dispose();
       }
     });
-
     animationController.forward();
   }
 
@@ -113,13 +102,23 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     animationController.forward();
   }
 
+  LatLng center;
+  List<LatLng> peoplePoints;
+
   @override
   Widget build(BuildContext context) {
-    LatLng center = LatLng(31.88212374450709, 54.369690043577506);
     return BlocProvider<MapBloc>(
       create: (context) => MapBloc(),
       child: BlocBuilder<MapBloc, MapState>(
         builder: (context, MapState state) {
+          peoplePoints = state.peopleLocations.values.toList();
+          print(peoplePoints.length);
+          if (state.myLocation.location != null) {
+            print('location Updated');
+            center = state.myLocation.location;
+            if (fixOnCenter)
+              _animatedMapMove(state.myLocation.location, controller.zoom);
+          }
           return Scaffold(
             appBar: AppBar(
               title: Text(widget.title),
@@ -138,21 +137,19 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
             ),
             body: FlutterMap(
               options: MapOptions(
-                  center: center,
-                  zoom: 14.0,
-                  // controller: controller,
-                  onTap: (tapPosition, point) {
-                    print(controller.zoom);
-                    print(point.latitude);
-                    print(point.longitude);
-                  },
-                  onLongPress: (tapPosition, LatLng point) {
-                    print(point.latitude);
-                    print(point.longitude);
-                    context.read<MapBloc>().addMarker(point);
-                  },
-                  minZoom: 10.5,
-                  maxZoom: 18.4),
+                center: LatLng(31.88212374450709, 54.369690043577506),
+                zoom: 14.0,
+                minZoom: 5,
+                maxZoom: 18.4,
+                onPositionChanged: (MapPosition position, bool hasGesture) {
+                  if (hasGesture) fixOnCenter = false;
+                },
+                onLongPress: (tapPosition, LatLng point) {
+                  print(point.latitude);
+                  print(point.longitude);
+                  context.read<MapBloc>().addMarker(point);
+                },
+              ),
               mapController: controller,
               layers: [
                 TileLayerOptions(
@@ -162,11 +159,11 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                 ),
                 MarkerLayerOptions(
                   markers: [
-                    if (state.myLocation != null)
+                    if (center != null)
                       Marker(
                         width: 80.0,
                         height: 80.0,
-                        point: state.myLocation,
+                        point: center,
                         builder: (ctx) => Container(
                           child: Column(
                             children: [
@@ -185,6 +182,18 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                                   style: TextStyle(fontSize: 10),
                                 )
                             ],
+                          ),
+                        ),
+                      ),
+                    for (LatLng position in peoplePoints)
+                      Marker(
+                        width: 80.0,
+                        height: 80.0,
+                        point: position,
+                        builder: (ctx) => new Container(
+                          child: new Icon(
+                            Icons.person,
+                            color: Colors.red,
                           ),
                         ),
                       ),
@@ -223,24 +232,24 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                       context.read<MapBloc>().getRoute(state.markers);
                       context.read<MapBloc>().connectToServer();
                     }),
-                SizedBox(width: 5),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: FloatingActionButton(
+                      child: state.myLocation.location == null
+                          ? CircularProgressIndicator(color: Colors.white)
+                          : Icon(Icons.location_on),
+                      backgroundColor: Colors.green,
+                      onPressed: () async {
+                        fixOnCenter = false;
+                        LocationData position =
+                            await context.read<MapBloc>().determinePosition();
+                        await _animatedMapMove(
+                            LatLng(position.latitude, position.longitude), 14);
+                        // onCenter = true;
+                      }),
+                ),
                 FloatingActionButton(
-                    child: Icon(Icons.location_on),
-                    backgroundColor: Colors.green,
-                    onPressed: () async {
-                      context
-                          .read<MapBloc>()
-                          .determinePosition()
-                          .then((LocationData position) {
-                        if (position != null)
-                          _animatedMapMove(
-                              LatLng(position.latitude, position.longitude),
-                              14);
-                      });
-                    }),
-                SizedBox(width: 5),
-                FloatingActionButton(
-                    child: Icon(Icons.compass_calibration_rounded),
+                    child: Icon(Icons.arrow_upward_rounded),
                     backgroundColor: Colors.green,
                     onPressed: () async {
                       _animatedMapRotation(0);
