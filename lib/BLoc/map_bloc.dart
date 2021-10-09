@@ -8,6 +8,7 @@ import 'package:bus/Model/PeopleLocationModel.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:socket_io_client/socket_io_client.dart';
 
 class MapState {
   LocationModel myLocation;
@@ -32,14 +33,17 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 
   Duration validDuration = const Duration(seconds: 5);
 
-  IO.Socket socket = IO.io('http://192.168.1.9:3000', <String, dynamic>{
-    'transports': ['websocket'],
-    'autoConnect': true,
-  });
+  IO.Socket socket;
 
   //make connection to server
-  void connectToServer() {
-    socket.connect();
+  Future<void> connectToServer() async {
+    socket = IO.io(
+        'http://185.204.197.146:3000',
+        OptionBuilder()
+            .setTransports(['websocket']) // for Flutter or Dart VM
+            .enableAutoConnect()
+            .build());
+
     socket.on('connect', (_) {
       print('connect');
     });
@@ -67,15 +71,21 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       state..peopleLocations.remove(data['user_id']);
       add(MapEvent.GetPeopleLocation);
     });
-    socket.on('disconnect', (_) => socket.connect());
     // socket.on('fromServer', (_) => print(_));
 
     //make suer that you are connect :)
-    socket.on('error', (_) => socket.connect());
-    socket.onDisconnect((data) => socket.connect());
-    socket.onclose((data) => socket.connect());
-    socket.onConnectError((data) => socket.connect());
-    socket.onConnectTimeout((data) => socket.connect());
+    socket.onDisconnect((data) async {
+      print(data);
+      await connectToServer();
+    });
+    socket.onConnectError((data) async {
+      print(data);
+      await connectToServer();
+    });
+    socket.onConnectTimeout((data) async {
+      print(data);
+      await connectToServer();
+    });
   }
 
 // check if a location is expired the ttl is 5 seconds
@@ -84,6 +94,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     try {
       state.peopleLocations.forEach((key, value) {
         if (value.time.isBefore(currentTime.subtract(validDuration))) {
+          print(key);
           state..peopleLocations.remove(key);
         }
       });
@@ -98,14 +109,24 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 //call enable location service and set a listener to send user location
   void setupLocationService() async {
     _location = Location();
-    // await location.enableBackgroundMode(enable: true);
+    await _location.enableBackgroundMode(enable: true);
     await determinePosition();
     _location.onLocationChanged.listen((LocationData currentLocation) {
-      if (socket.disconnected) connectToServer();
+      if (socket.disconnected) {
+        print('object');
+        connectToServer();
+      }
       double latitudeDifference =
           currentLocation.latitude - state.myLocation.location.latitude;
       double longitudeDifference =
           currentLocation.longitude - state.myLocation.location.longitude;
+
+      if (state.onBus)
+        socket.emit('sendLocation', {
+          "lat": currentLocation.latitude,
+          "lng": currentLocation.longitude
+        });
+
       //it sends when user move a distance
       if (latitudeDifference.abs() > 0.0001 ||
           longitudeDifference.abs() > 0.0001) {
