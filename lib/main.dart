@@ -101,15 +101,15 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
 
                 //these options will limit map area
 
-                nePanBoundary: LatLng(31.939580199898106, 54.38910940217473),
+                // nePanBoundary: LatLng(31.939580199898106, 54.38910940217473),
                 // north-east last location witch user can't go any more
 
-                swPanBoundary: LatLng(31.832241219879364, 54.29659354468416),
+                // swPanBoundary: LatLng(31.832241219879364, 54.29659354468416),
                 // south-west last location witch user can't go any more
 
                 //initial zoom
                 zoom: 14.0,
-                minZoom: 10.5,
+                // minZoom: 10.5,
                 maxZoom: 18.4,
                 screenSize: size,
                 //to control icon size and camera follow option
@@ -148,6 +148,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                         width: 80.0,
                         height: 80.0,
                         point: myLocation,
+                        rotate: true,
                         builder: (ctx) => Icon(
                           state.onBus
                               ? Icons.directions_bus_rounded
@@ -165,12 +166,11 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                         width: 80.0,
                         height: 80.0,
                         point: position.location,
-                        builder: (ctx) => new Container(
-                          child: new Icon(
-                            Icons.directions_bus_rounded,
-                            size: state.zoom < 11 ? 10 : state.zoom * 2,
-                            color: Colors.deepOrangeAccent,
-                          ),
+                        rotate: true,
+                        builder: (ctx) => Icon(
+                          Icons.directions_bus_rounded,
+                          size: state.zoom < 11 ? 10 : state.zoom * 2,
+                          color: Colors.deepOrangeAccent,
                         ),
                       ),
 
@@ -180,6 +180,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                         width: 80.0,
                         height: 80.0,
                         point: position,
+                        rotate: true,
                         builder: (ctx) => Icon(
                           Icons.location_on_rounded,
                           color: Colors.purple,
