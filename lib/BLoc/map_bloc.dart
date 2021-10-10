@@ -5,6 +5,7 @@ import 'package:bloc/bloc.dart';
 import 'package:bus/Model/Functions.dart';
 import 'package:bus/Model/LocationModel.dart';
 import 'package:bus/Model/PeopleLocationModel.dart';
+import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
@@ -31,25 +32,56 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     Timer.periodic(validDuration, (timer) => checkLocationsValidation());
   }
 
+  static const platform = MethodChannel('com.yazd.bus/socket');
   Duration validDuration = const Duration(seconds: 5);
+  bool onBackground = false;
+
+  Future<void> connectToSocket() async {
+    try {
+      if (!state.onBus) return;
+      socket.emit('stopBroadcast');
+      socket.close();
+      var res = await platform.invokeMethod('connectToSocket');
+      onBackground = true;
+      print(res);
+    } on PlatformException catch (e) {
+      onBackground = false;
+      print("Failed to connect to socket : '${e.message}'.");
+    }
+  }
+
+  Future<void> disconnectFromSocket() async {
+    try {
+      if (!state.onBus) return;
+      onBackground = false;
+      socket.open();
+      connectToServer();
+      var res = await platform.invokeMethod('disconnectFromSocket');
+      print(res);
+    } on PlatformException catch (e) {
+      onBackground = false;
+      print("Failed to disconnect to socket : '${e.message}'.");
+    }
+  }
 
   IO.Socket socket;
 
   //make connection to server
   Future<void> connectToServer() async {
+    if (onBackground) return;
     socket = IO.io(
-        'http://185.204.197.146:3000',
+        'http://127.0.0.1:3000',
         OptionBuilder()
             .setTransports(['websocket']) // for Flutter or Dart VM
             .enableAutoConnect()
             .build());
-
     socket.on('connect', (_) {
       print('connect');
     });
 
     //update or create new people location
     socket.on('getLocation', (data) {
+      print(data);
       if (state.myLocation.id != null &&
           state.myLocation.id != data['user_id']) {
         state
@@ -66,8 +98,6 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     });
     // when a user stop broadcast her/his location
     socket.on('userStopBroadcast', (data) {
-      print(data);
-      print(data['user_id'].runtimeType);
       state..peopleLocations.remove(data['user_id']);
       add(MapEvent.GetPeopleLocation);
     });
@@ -75,15 +105,12 @@ class MapBloc extends Bloc<MapEvent, MapState> {
 
     //make suer that you are connect :)
     socket.onDisconnect((data) async {
-      print(data);
       await connectToServer();
     });
     socket.onConnectError((data) async {
-      print(data);
       await connectToServer();
     });
     socket.onConnectTimeout((data) async {
-      print(data);
       await connectToServer();
     });
   }
@@ -112,10 +139,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     await _location.enableBackgroundMode(enable: true);
     await determinePosition();
     _location.onLocationChanged.listen((LocationData currentLocation) {
-      if (socket.disconnected) {
-        print('object');
-        connectToServer();
-      }
+      if (socket.disconnected) connectToServer();
+
       double latitudeDifference =
           currentLocation.latitude - state.myLocation.location.latitude;
       double longitudeDifference =
@@ -153,7 +178,6 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     try {
       _serviceEnabled = await _location.serviceEnabled();
       if (!_serviceEnabled) {
-        print('get location');
         _serviceEnabled = await _location.requestService();
         if (!_serviceEnabled) {
           return null;

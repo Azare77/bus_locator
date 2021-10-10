@@ -48,7 +48,10 @@ class MyHomePage extends StatefulWidget {
   _MyHomePageState createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
+class _MyHomePageState extends State<MyHomePage>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
+  MapBloc bloc;
+
   final MapController controller = MapController();
 
   //if this var be true then camera will follow user location
@@ -61,188 +64,208 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   List<PeopleLocationModel> peopleLocations;
 
   @override
+  initState() {
+    bloc = MapBloc();
+    WidgetsBinding.instance.addObserver(this);
+    super.initState();
+  }
+
+  @override
+  dispose() {
+    bloc.close();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      print('resumed');
+      bloc.disconnectFromSocket();
+    }
+    if (state == AppLifecycleState.paused) {
+      print('paused');
+      bloc.connectToSocket();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     //get size of screen
     Size size = MediaQuery.of(context).size;
 
-    return BlocProvider<MapBloc>(
-      create: (context) => MapBloc(),
-      child: BlocBuilder<MapBloc, MapState>(
-        // this builder calls when screen have a new event and needs to update
-        builder: (context, MapState state) {
-          //get newest user locations
-          peopleLocations = state.peopleLocations.values.toList();
-          if (state.myLocation.location != null) {
-            myLocation = state.myLocation.location;
-            if (fixOnCenter)
-              _animatedMapMove(state.myLocation.location, controller.zoom);
-          }
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(widget.title),
-              actions: [
-                Row(
-                  children: [
-                    Text('on Bus ?'),
-                    //if this switch is on then your location is broadcasting
-                    Switch(
-                        value: state.onBus,
-                        onChanged: (value) {
-                          context.read<MapBloc>().changeUseStatus();
-                        }),
-                  ],
-                )
-              ],
-            ),
-            body: FlutterMap(
-              options: MapOptions(
-                //initial center location (it only use in first build)
-                center: LatLng(31.88276335597011, 54.36766399046463),
-
-                //these options will limit map area
-
-                // nePanBoundary: LatLng(31.939580199898106, 54.38910940217473),
-                // north-east last location witch user can't go any more
-
-                // swPanBoundary: LatLng(31.832241219879364, 54.29659354468416),
-                // south-west last location witch user can't go any more
-
-                //initial zoom
-                zoom: 14.0,
-                // minZoom: 10.5,
-                maxZoom: 18.4,
-                screenSize: size,
-                //to control icon size and camera follow option
-                onPositionChanged: (MapPosition position, bool hasGesture) {
-                  //if user change camera manually so camera don't follow user any more
-                  if (hasGesture) fixOnCenter = false;
-
-                  // update icon sizes
-                  double zoom =
-                      double.parse(controller.zoom.toStringAsFixed(1));
-                  if (zoom != state.zoom)
-                    context.read<MapBloc>().changeZoom(zoom);
-                },
-
-                //add some markers to navigate and route between them
-                onLongPress: (tapPosition, LatLng point) {
-                  print(point.latitude);
-                  print(point.longitude);
-                  context.read<MapBloc>().addMarker(point);
-                },
-              ),
-              mapController: controller,
-              layers: [
-                //map skin
-                TileLayerOptions(
-                  urlTemplate:
-                      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                  subdomains: ['a', 'b', 'c'],
-                ),
-
-                MarkerLayerOptions(
-                  markers: [
-                    //show user loaction
-                    if (myLocation != null)
-                      Marker(
-                        width: 80.0,
-                        height: 80.0,
-                        point: myLocation,
-                        rotate: true,
-                        builder: (ctx) => Icon(
-                          state.onBus
-                              ? Icons.directions_bus_rounded
-                              : Icons.location_on_rounded,
-                          size: state.zoom < 11 ? 10 : state.zoom * 2,
-                          color: state.onBus
-                              ? Colors.deepOrangeAccent
-                              : Colors.blue,
-                        ),
-                      ),
-
-                    //show people location
-                    for (PeopleLocationModel position in peopleLocations)
-                      Marker(
-                        width: 80.0,
-                        height: 80.0,
-                        point: position.location,
-                        rotate: true,
-                        builder: (ctx) => Icon(
-                          Icons.directions_bus_rounded,
-                          size: state.zoom < 11 ? 10 : state.zoom * 2,
-                          color: Colors.deepOrangeAccent,
-                        ),
-                      ),
-
-                    //show navigates markers witch user want to pass
-                    for (LatLng position in state.markers)
-                      Marker(
-                        width: 80.0,
-                        height: 80.0,
-                        point: position,
-                        rotate: true,
-                        builder: (ctx) => Icon(
-                          Icons.location_on_rounded,
-                          color: Colors.purple,
-                        ),
-                      ),
-                  ],
-                ),
-
-                //show route between purple markers
-                PolylineLayerOptions(
-                  polylineCulling: true,
-                  polylines: [
-                    Polyline(
-                        points: state.route,
-                        strokeWidth: 4.0,
-                        color: Colors.green),
-                  ],
-                )
-              ],
-            ),
-            floatingActionButton: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                //make routing operations and show on map
-                FloatingActionButton(
-                    child: Icon(Icons.alt_route_rounded),
-                    backgroundColor: Colors.red,
-                    onPressed: () async {
-                      context.read<MapBloc>().getRoute(state.markers);
-                      context.read<MapBloc>().connectToServer();
-                    }),
-
-                //force to get user location and make camera to follow user
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  child: FloatingActionButton(
-                      child: state.myLocation.location == null
-                          ? CircularProgressIndicator(color: Colors.white)
-                          : Icon(Icons.location_on),
-                      backgroundColor: Colors.green,
-                      onPressed: () async {
-                        fixOnCenter = false;
-                        LocationData position =
-                            await context.read<MapBloc>().determinePosition();
-                        await _animatedMapMove(
-                            LatLng(position.latitude, position.longitude), 14);
-                        // onCenter = true;
+    return BlocBuilder(
+      bloc: bloc,
+      // this builder calls when screen have a new event and needs to update
+      builder: (context, MapState state) {
+        //get newest user locations
+        peopleLocations = state.peopleLocations.values.toList();
+        if (state.myLocation.location != null) {
+          myLocation = state.myLocation.location;
+          if (fixOnCenter)
+            _animatedMapMove(state.myLocation.location, controller.zoom);
+        }
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+            actions: [
+              Row(
+                children: [
+                  Text('on Bus ?'),
+                  //if this switch is on then your location is broadcasting
+                  Switch(
+                      value: state.onBus,
+                      onChanged: (value) {
+                        bloc.changeUseStatus();
                       }),
-                ),
+                ],
+              )
+            ],
+          ),
+          body: FlutterMap(
+            options: MapOptions(
+              //initial center location (it only use in first build)
+              center: LatLng(31.88276335597011, 54.36766399046463),
 
-                //rotate map to 0 degrees
-                FloatingActionButton(
-                    child: Icon(Icons.arrow_upward_rounded),
+              //these options will limit map area
+
+              // nePanBoundary: LatLng(31.939580199898106, 54.38910940217473),
+              // north-east last location witch user can't go any more
+
+              // swPanBoundary: LatLng(31.832241219879364, 54.29659354468416),
+              // south-west last location witch user can't go any more
+
+              //initial zoom
+              zoom: 14.0,
+              // minZoom: 10.5,
+              maxZoom: 18.4,
+              screenSize: size,
+              //to control icon size and camera follow option
+              onPositionChanged: (MapPosition position, bool hasGesture) {
+                //if user change camera manually so camera don't follow user any more
+                if (hasGesture) fixOnCenter = false;
+
+                // update icon sizes
+                double zoom = double.parse(controller.zoom.toStringAsFixed(1));
+                if (zoom != state.zoom) bloc.changeZoom(zoom);
+              },
+
+              //add some markers to navigate and route between them
+              onLongPress: (tapPosition, LatLng point) {
+                print(point.latitude);
+                print(point.longitude);
+                bloc.addMarker(point);
+              },
+            ),
+            mapController: controller,
+            layers: [
+              //map skin
+              TileLayerOptions(
+                urlTemplate:
+                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                subdomains: ['a', 'b', 'c'],
+              ),
+
+              MarkerLayerOptions(
+                markers: [
+                  //show user loaction
+                  if (myLocation != null)
+                    Marker(
+                      width: 80.0,
+                      height: 80.0,
+                      point: myLocation,
+                      rotate: true,
+                      builder: (ctx) => Icon(
+                        state.onBus
+                            ? Icons.directions_bus_rounded
+                            : Icons.location_on_rounded,
+                        size: state.zoom < 11 ? 10 : state.zoom * 2,
+                        color:
+                            state.onBus ? Colors.deepOrangeAccent : Colors.blue,
+                      ),
+                    ),
+
+                  //show people location
+                  for (PeopleLocationModel position in peopleLocations)
+                    Marker(
+                      width: 80.0,
+                      height: 80.0,
+                      point: position.location,
+                      rotate: true,
+                      builder: (ctx) => Icon(
+                        Icons.directions_bus_rounded,
+                        size: state.zoom < 11 ? 10 : state.zoom * 2,
+                        color: Colors.deepOrangeAccent,
+                      ),
+                    ),
+
+                  //show navigates markers witch user want to pass
+                  for (LatLng position in state.markers)
+                    Marker(
+                      width: 80.0,
+                      height: 80.0,
+                      point: position,
+                      rotate: true,
+                      builder: (ctx) => Icon(
+                        Icons.location_on_rounded,
+                        color: Colors.purple,
+                      ),
+                    ),
+                ],
+              ),
+
+              //show route between purple markers
+              PolylineLayerOptions(
+                polylineCulling: true,
+                polylines: [
+                  Polyline(
+                      points: state.route,
+                      strokeWidth: 4.0,
+                      color: Colors.green),
+                ],
+              )
+            ],
+          ),
+          floatingActionButton: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              //make routing operations and show on map
+              FloatingActionButton(
+                  child: Icon(Icons.alt_route_rounded),
+                  backgroundColor: Colors.red,
+                  onPressed: () async {
+                    bloc.getRoute(state.markers);
+                    bloc.connectToServer();
+                  }),
+
+              //force to get user location and make camera to follow user
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: FloatingActionButton(
+                    child: state.myLocation.location == null
+                        ? CircularProgressIndicator(color: Colors.white)
+                        : Icon(Icons.location_on),
                     backgroundColor: Colors.green,
                     onPressed: () async {
-                      _animatedMapRotation(0);
+                      fixOnCenter = false;
+                      LocationData position = await bloc.determinePosition();
+                      await _animatedMapMove(
+                          LatLng(position.latitude, position.longitude), 14);
+                      // onCenter = true;
                     }),
-              ],
-            ),
-          );
-        },
-      ),
+              ),
+
+              //rotate map to 0 degrees
+              FloatingActionButton(
+                  child: Icon(Icons.arrow_upward_rounded),
+                  backgroundColor: Colors.green,
+                  onPressed: () async {
+                    _animatedMapRotation(0);
+                  }),
+            ],
+          ),
+        );
+      },
     );
   }
 
