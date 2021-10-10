@@ -24,7 +24,6 @@ import java.net.URISyntaxException;
 import io.flutter.Log;
 import io.socket.client.IO;
 import io.socket.client.Socket;
-import io.socket.emitter.Emitter;
 
 public class SocketService extends Service {
 
@@ -47,7 +46,6 @@ public class SocketService extends Service {
     MyLocation myLocation = new MyLocation();
     Handler handler;
     Socket socket;
-    String id;
 
     @Override
     public void onCreate() {
