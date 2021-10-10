@@ -65,7 +65,7 @@ public class SocketService extends Service {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startMyOwnForeground();
             }
-            socket = IO.socket("http://185.204.197.146:3000");
+            socket = IO.socket("http://127.0.0.1:3000");
             socket.connect();
             myLocation.getLocation(context, locationResult);
             handler.postDelayed(new Runnable() {
